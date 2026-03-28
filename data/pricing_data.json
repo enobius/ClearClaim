@@ -1,0 +1,277 @@
+{
+  "metadata": {
+    "source": "Medicare Physician & Other Practitioners - by Provider and Service",
+    "source_url": "https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service",
+    "data_year": 2022,
+    "format_fidelity": "Fields mirror the CMS provider-and-service API response format.",
+    "synthetic_provider_identifiers": true,
+    "notes": "Representative values are aligned to Medicare payment ranges for demo scenarios. NPIs and provider identities are synthetic and are not live CMS record keys."
+  },
+  "scenarios": {
+    "knee_mri": {
+      "cpt_code": "73721",
+      "description": "MRI knee without contrast",
+      "icd10": "M17.11",
+      "icd10_description": "Primary osteoarthritis, right knee",
+      "providers": [
+        {
+          "npi": "1234567890",
+          "provider_name": "Connecticut Advanced Imaging",
+          "provider_city": "Bridgeport",
+          "provider_state": "CT",
+          "provider_zip": "06604",
+          "provider_type": "Diagnostic Radiology",
+          "place_of_service": "F",
+          "line_srvc_cnt": 312,
+          "bene_unique_cnt": 298,
+          "avg_submitted_chrg_amt": 1842.00,
+          "avg_medicare_allowed_amt": 466.30,
+          "avg_medicare_payment_amt": 373.04,
+          "avg_medicare_standard_amt": 441.15
+        },
+        {
+          "npi": "1234567891",
+          "provider_name": "St. Vincent's Medical Center",
+          "provider_city": "Bridgeport",
+          "provider_state": "CT",
+          "provider_zip": "06606",
+          "provider_type": "Diagnostic Radiology",
+          "place_of_service": "O",
+          "line_srvc_cnt": 587,
+          "bene_unique_cnt": 541,
+          "avg_submitted_chrg_amt": 2310.00,
+          "avg_medicare_allowed_amt": 512.47,
+          "avg_medicare_payment_amt": 409.98,
+          "avg_medicare_standard_amt": 441.15
+        },
+        {
+          "npi": "1234567892",
+          "provider_name": "Yale New Haven Health Imaging",
+          "provider_city": "New Haven",
+          "provider_state": "CT",
+          "provider_zip": "06510",
+          "provider_type": "Diagnostic Radiology",
+          "place_of_service": "O",
+          "line_srvc_cnt": 1243,
+          "bene_unique_cnt": 1187,
+          "avg_submitted_chrg_amt": 2785.00,
+          "avg_medicare_allowed_amt": 498.62,
+          "avg_medicare_payment_amt": 398.90,
+          "avg_medicare_standard_amt": 441.15
+        }
+      ]
+    },
+    "chest_ct": {
+      "cpt_code": "71260",
+      "description": "CT chest with contrast",
+      "icd10": "J18.9",
+      "icd10_description": "Pneumonia, unspecified organism",
+      "providers": [
+        {
+          "npi": "2345678901",
+          "provider_name": "Houston Methodist Imaging",
+          "provider_city": "Houston",
+          "provider_state": "TX",
+          "provider_zip": "77030",
+          "provider_type": "Diagnostic Radiology",
+          "place_of_service": "O",
+          "line_srvc_cnt": 1856,
+          "bene_unique_cnt": 1790,
+          "avg_submitted_chrg_amt": 3420.00,
+          "avg_medicare_allowed_amt": 358.21,
+          "avg_medicare_payment_amt": 286.57,
+          "avg_medicare_standard_amt": 336.48
+        },
+        {
+          "npi": "2345678902",
+          "provider_name": "MD Anderson Diagnostic Imaging",
+          "provider_city": "Houston",
+          "provider_state": "TX",
+          "provider_zip": "77054",
+          "provider_type": "Diagnostic Radiology",
+          "place_of_service": "O",
+          "line_srvc_cnt": 2341,
+          "bene_unique_cnt": 2198,
+          "avg_submitted_chrg_amt": 4150.00,
+          "avg_medicare_allowed_amt": 362.88,
+          "avg_medicare_payment_amt": 290.30,
+          "avg_medicare_standard_amt": 336.48
+        },
+        {
+          "npi": "2345678903",
+          "provider_name": "Texas Medical Center Radiology",
+          "provider_city": "Dallas",
+          "provider_state": "TX",
+          "provider_zip": "75235",
+          "provider_type": "Diagnostic Radiology",
+          "place_of_service": "F",
+          "line_srvc_cnt": 423,
+          "bene_unique_cnt": 401,
+          "avg_submitted_chrg_amt": 1580.00,
+          "avg_medicare_allowed_amt": 341.76,
+          "avg_medicare_payment_amt": 273.41,
+          "avg_medicare_standard_amt": 336.48
+        }
+      ]
+    },
+    "rotator_cuff_repair": {
+      "cpt_code": "29827",
+      "description": "Arthroscopic rotator cuff repair",
+      "icd10": "M75.110",
+      "icd10_description": "Incomplete rotator cuff tear of right shoulder",
+      "providers": [
+        {
+          "npi": "3456789012",
+          "provider_name": "Cedars-Sinai Orthopedics",
+          "provider_city": "Los Angeles",
+          "provider_state": "CA",
+          "provider_zip": "90048",
+          "provider_type": "Orthopedic Surgery",
+          "place_of_service": "O",
+          "line_srvc_cnt": 189,
+          "bene_unique_cnt": 189,
+          "avg_submitted_chrg_amt": 12450.00,
+          "avg_medicare_allowed_amt": 1876.42,
+          "avg_medicare_payment_amt": 1501.14,
+          "avg_medicare_standard_amt": 1724.30
+        },
+        {
+          "npi": "3456789013",
+          "provider_name": "UCLA Health Orthopedic Surgery",
+          "provider_city": "Los Angeles",
+          "provider_state": "CA",
+          "provider_zip": "90095",
+          "provider_type": "Orthopedic Surgery",
+          "place_of_service": "O",
+          "line_srvc_cnt": 267,
+          "bene_unique_cnt": 267,
+          "avg_submitted_chrg_amt": 14200.00,
+          "avg_medicare_allowed_amt": 1912.55,
+          "avg_medicare_payment_amt": 1530.04,
+          "avg_medicare_standard_amt": 1724.30
+        },
+        {
+          "npi": "3456789014",
+          "provider_name": "Bay Area Sports Medicine",
+          "provider_city": "San Francisco",
+          "provider_state": "CA",
+          "provider_zip": "94115",
+          "provider_type": "Orthopedic Surgery",
+          "place_of_service": "F",
+          "line_srvc_cnt": 95,
+          "bene_unique_cnt": 95,
+          "avg_submitted_chrg_amt": 9800.00,
+          "avg_medicare_allowed_amt": 1953.18,
+          "avg_medicare_payment_amt": 1562.54,
+          "avg_medicare_standard_amt": 1724.30
+        }
+      ]
+    },
+    "colonoscopy_biopsy": {
+      "cpt_code": "45380",
+      "description": "Colonoscopy with biopsy",
+      "icd10": "K63.5",
+      "icd10_description": "Polyp of colon",
+      "providers": [
+        {
+          "npi": "4567890123",
+          "provider_name": "Miami Gastroenterology Associates",
+          "provider_city": "Miami",
+          "provider_state": "FL",
+          "provider_zip": "33136",
+          "provider_type": "Gastroenterology",
+          "place_of_service": "F",
+          "line_srvc_cnt": 1456,
+          "bene_unique_cnt": 1398,
+          "avg_submitted_chrg_amt": 2890.00,
+          "avg_medicare_allowed_amt": 528.14,
+          "avg_medicare_payment_amt": 422.51,
+          "avg_medicare_standard_amt": 504.22
+        },
+        {
+          "npi": "4567890124",
+          "provider_name": "Baptist Health Endoscopy Center",
+          "provider_city": "Jacksonville",
+          "provider_state": "FL",
+          "provider_zip": "32207",
+          "provider_type": "Gastroenterology",
+          "place_of_service": "F",
+          "line_srvc_cnt": 987,
+          "bene_unique_cnt": 943,
+          "avg_submitted_chrg_amt": 2150.00,
+          "avg_medicare_allowed_amt": 511.38,
+          "avg_medicare_payment_amt": 409.10,
+          "avg_medicare_standard_amt": 504.22
+        },
+        {
+          "npi": "4567890125",
+          "provider_name": "Orlando Regional GI",
+          "provider_city": "Orlando",
+          "provider_state": "FL",
+          "provider_zip": "32806",
+          "provider_type": "Gastroenterology",
+          "place_of_service": "O",
+          "line_srvc_cnt": 2134,
+          "bene_unique_cnt": 2045,
+          "avg_submitted_chrg_amt": 3560.00,
+          "avg_medicare_allowed_amt": 542.91,
+          "avg_medicare_payment_amt": 434.33,
+          "avg_medicare_standard_amt": 504.22
+        }
+      ]
+    },
+    "echocardiogram": {
+      "cpt_code": "93306",
+      "description": "Transthoracic echocardiogram complete",
+      "icd10": "I50.9",
+      "icd10_description": "Heart failure, unspecified",
+      "providers": [
+        {
+          "npi": "5678901234",
+          "provider_name": "NYU Langone Cardiology",
+          "provider_city": "New York",
+          "provider_state": "NY",
+          "provider_zip": "10016",
+          "provider_type": "Cardiology",
+          "place_of_service": "O",
+          "line_srvc_cnt": 3421,
+          "bene_unique_cnt": 3198,
+          "avg_submitted_chrg_amt": 2950.00,
+          "avg_medicare_allowed_amt": 418.73,
+          "avg_medicare_payment_amt": 334.98,
+          "avg_medicare_standard_amt": 383.56
+        },
+        {
+          "npi": "5678901235",
+          "provider_name": "Mount Sinai Heart",
+          "provider_city": "New York",
+          "provider_state": "NY",
+          "provider_zip": "10029",
+          "provider_type": "Cardiology",
+          "place_of_service": "O",
+          "line_srvc_cnt": 2876,
+          "bene_unique_cnt": 2654,
+          "avg_submitted_chrg_amt": 3200.00,
+          "avg_medicare_allowed_amt": 425.11,
+          "avg_medicare_payment_amt": 340.09,
+          "avg_medicare_standard_amt": 383.56
+        },
+        {
+          "npi": "5678901236",
+          "provider_name": "Columbia Heart Center",
+          "provider_city": "New York",
+          "provider_state": "NY",
+          "provider_zip": "10032",
+          "provider_type": "Cardiology",
+          "place_of_service": "F",
+          "line_srvc_cnt": 1543,
+          "bene_unique_cnt": 1487,
+          "avg_submitted_chrg_amt": 1875.00,
+          "avg_medicare_allowed_amt": 396.44,
+          "avg_medicare_payment_amt": 317.15,
+          "avg_medicare_standard_amt": 383.56
+        }
+      ]
+    }
+  }
+}

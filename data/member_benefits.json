@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "source": "MOCK - Would require Availity/Change Healthcare API in production",
+    "notes": "Simulated insurance benefit verification data. In production, this comes from real-time 270/271 EDI eligibility transactions."
+  },
+  "plans": {
+    "aetna_ppo": {
+      "payer_name": "Aetna",
+      "plan_name": "Aetna Open Access PPO",
+      "plan_type": "PPO",
+      "member": {
+        "member_id": "W123456789",
+        "group_number": "GP-88421",
+        "effective_date": "2025-01-01",
+        "termination_date": null,
+        "status": "active"
+      },
+      "benefits": {
+        "individual_deductible": 500,
+        "individual_deductible_met": 320,
+        "individual_deductible_remaining": 180,
+        "family_deductible": 1500,
+        "out_of_pocket_max": 6000,
+        "out_of_pocket_spent": 485,
+        "coinsurance_in_network": 0.20,
+        "coinsurance_out_of_network": 0.40,
+        "copay_specialist": 40,
+        "copay_primary": 25
+      },
+      "prior_auth_rules": {
+        "73721": {"required": true, "notes": "Prior auth required for advanced imaging (MRI/CT/PET)"},
+        "71260": {"required": true, "notes": "Prior auth required for advanced imaging"},
+        "29827": {"required": true, "notes": "Prior auth required for all elective surgeries"},
+        "45380": {"required": false, "notes": "No prior auth for screening/diagnostic colonoscopy"},
+        "93306": {"required": false, "notes": "No prior auth for echocardiogram"}
+      }
+    },
+    "bcbs_ppo": {
+      "payer_name": "Blue Cross Blue Shield",
+      "plan_name": "Blue Preferred PPO",
+      "plan_type": "PPO",
+      "member": {
+        "member_id": "XYZ987654321",
+        "group_number": "BC-55210",
+        "effective_date": "2025-01-01",
+        "termination_date": null,
+        "status": "active"
+      },
+      "benefits": {
+        "individual_deductible": 750,
+        "individual_deductible_met": 750,
+        "individual_deductible_remaining": 0,
+        "family_deductible": 2250,
+        "out_of_pocket_max": 7500,
+        "out_of_pocket_spent": 1250,
+        "coinsurance_in_network": 0.20,
+        "coinsurance_out_of_network": 0.40,
+        "copay_specialist": 50,
+        "copay_primary": 30
+      },
+      "prior_auth_rules": {
+        "73721": {"required": true, "notes": "Prior auth via eviCore for MRI"},
+        "71260": {"required": true, "notes": "Prior auth via eviCore for CT"},
+        "29827": {"required": true, "notes": "Prior auth required, clinical notes needed"},
+        "45380": {"required": false, "notes": "No prior auth needed"},
+        "93306": {"required": false, "notes": "No prior auth needed"}
+      }
+    },
+    "unitedhealthcare_hmo": {
+      "payer_name": "UnitedHealthcare",
+      "plan_name": "UHC Choice Plus HMO",
+      "plan_type": "HMO",
+      "member": {
+        "member_id": "UHC445566778",
+        "group_number": "UH-33019",
+        "effective_date": "2025-03-01",
+        "termination_date": null,
+        "status": "active"
+      },
+      "benefits": {
+        "individual_deductible": 1000,
+        "individual_deductible_met": 0,
+        "individual_deductible_remaining": 1000,
+        "family_deductible": 3000,
+        "out_of_pocket_max": 8500,
+        "out_of_pocket_spent": 0,
+        "coinsurance_in_network": 0.25,
+        "coinsurance_out_of_network": 0.50,
+        "copay_specialist": 60,
+        "copay_primary": 30
+      },
+      "prior_auth_rules": {
+        "73721": {"required": true, "notes": "Prior auth required, must use in-network imaging center"},
+        "71260": {"required": true, "notes": "Prior auth required via Optum"},
+        "29827": {"required": true, "notes": "Prior auth + peer-to-peer review may be needed"},
+        "45380": {"required": false, "notes": "Covered as preventive, no auth needed"},
+        "93306": {"required": true, "notes": "Prior auth required for cardiac imaging in HMO"}
+      }
+    }
+  }
+}

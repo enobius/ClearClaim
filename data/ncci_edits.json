@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "source": "CMS NCCI Procedure-to-Procedure (PTP) Edits",
+    "source_url": "https://www.cms.gov/medicare/coding-billing/national-correct-coding-initiative-ncci-edits/medicare-ncci-procedure-procedure-ptp-edits",
+    "version": "v320r0",
+    "effective_date": "2026-01-01",
+    "notes": "Subset of NCCI PTP edits relevant to demo scenarios. Column 1 = payable code, Column 2 = denied code unless modifier applied."
+  },
+  "ptp_edits": {
+    "73721": {
+      "description": "MRI knee without contrast",
+      "edit_pairs": [
+        {"column_two": "73720", "column_two_desc": "MRI knee without then with contrast", "modifier_indicator": "1", "rationale": "Mutually exclusive - cannot bill both non-contrast and with-contrast MRI of same knee"},
+        {"column_two": "73722", "column_two_desc": "MRI knee with contrast", "modifier_indicator": "1", "rationale": "Bundling - contrast MRI includes non-contrast sequences"},
+        {"column_two": "76000", "column_two_desc": "Fluoroscopy up to 1 hour", "modifier_indicator": "0", "rationale": "Fluoroscopy not separately reportable with MRI"},
+        {"column_two": "77003", "column_two_desc": "Fluoroscopic guidance", "modifier_indicator": "0", "rationale": "Guidance included in MRI procedure"},
+        {"column_two": "73718", "column_two_desc": "MRI lower extremity without contrast", "modifier_indicator": "1", "rationale": "Overlapping anatomical region"}
+      ]
+    },
+    "71260": {
+      "description": "CT chest with contrast",
+      "edit_pairs": [
+        {"column_two": "71250", "column_two_desc": "CT chest without contrast", "modifier_indicator": "1", "rationale": "Mutually exclusive - contrast CT includes non-contrast sequences"},
+        {"column_two": "71270", "column_two_desc": "CT chest without then with contrast", "modifier_indicator": "1", "rationale": "Bundling - combined CT includes single contrast study"},
+        {"column_two": "71275", "column_two_desc": "CT angiography chest", "modifier_indicator": "1", "rationale": "Overlapping study with contrast CT"},
+        {"column_two": "76000", "column_two_desc": "Fluoroscopy up to 1 hour", "modifier_indicator": "0", "rationale": "Fluoroscopy not separately reportable with CT"},
+        {"column_two": "74174", "column_two_desc": "CT angiography abdomen and pelvis with chest", "modifier_indicator": "1", "rationale": "Chest component already included"}
+      ]
+    },
+    "29827": {
+      "description": "Arthroscopic rotator cuff repair",
+      "edit_pairs": [
+        {"column_two": "29826", "column_two_desc": "Arthroscopic acromioplasty", "modifier_indicator": "0", "rationale": "Acromioplasty is included in rotator cuff repair"},
+        {"column_two": "29822", "column_two_desc": "Arthroscopic debridement limited", "modifier_indicator": "0", "rationale": "Debridement is inherent to the repair procedure"},
+        {"column_two": "29823", "column_two_desc": "Arthroscopic debridement extensive", "modifier_indicator": "0", "rationale": "Debridement is inherent to the repair procedure"},
+        {"column_two": "29824", "column_two_desc": "Arthroscopic distal claviculectomy", "modifier_indicator": "1", "rationale": "Separate procedure but same session possible with modifier"},
+        {"column_two": "23350", "column_two_desc": "Injection for shoulder arthrography", "modifier_indicator": "0", "rationale": "Injection included in surgical approach"},
+        {"column_two": "29805", "column_two_desc": "Arthroscopy shoulder diagnostic", "modifier_indicator": "0", "rationale": "Diagnostic arthroscopy included in surgical arthroscopy"}
+      ]
+    },
+    "45380": {
+      "description": "Colonoscopy with biopsy",
+      "edit_pairs": [
+        {"column_two": "45378", "column_two_desc": "Colonoscopy diagnostic", "modifier_indicator": "0", "rationale": "Diagnostic colonoscopy is included in colonoscopy with biopsy"},
+        {"column_two": "45379", "column_two_desc": "Colonoscopy with foreign body removal", "modifier_indicator": "1", "rationale": "Separate procedure possible with modifier"},
+        {"column_two": "45381", "column_two_desc": "Colonoscopy with submucosal injection", "modifier_indicator": "1", "rationale": "Can be separate procedure at different site"},
+        {"column_two": "45382", "column_two_desc": "Colonoscopy with control of bleeding", "modifier_indicator": "1", "rationale": "May be separately reportable with modifier"},
+        {"column_two": "74263", "column_two_desc": "CT colonography screening", "modifier_indicator": "0", "rationale": "CT colonography not reportable with same-day colonoscopy"},
+        {"column_two": "44388", "column_two_desc": "Colonoscopy through stoma diagnostic", "modifier_indicator": "1", "rationale": "Different anatomical approach"}
+      ]
+    },
+    "93306": {
+      "description": "Transthoracic echocardiogram complete",
+      "edit_pairs": [
+        {"column_two": "93303", "column_two_desc": "Transthoracic echo congenital complete", "modifier_indicator": "1", "rationale": "Mutually exclusive - cannot bill both adult and congenital echo"},
+        {"column_two": "93304", "column_two_desc": "Transthoracic echo congenital follow-up", "modifier_indicator": "1", "rationale": "Mutually exclusive with complete adult echo"},
+        {"column_two": "93307", "column_two_desc": "Transthoracic echo without Doppler", "modifier_indicator": "0", "rationale": "Complete echo includes non-Doppler component"},
+        {"column_two": "93308", "column_two_desc": "Transthoracic echo follow-up", "modifier_indicator": "0", "rationale": "Follow-up echo is subset of complete echo"},
+        {"column_two": "93320", "column_two_desc": "Doppler echo complete", "modifier_indicator": "0", "rationale": "Doppler included in 93306 complete echo"},
+        {"column_two": "93325", "column_two_desc": "Doppler color flow add-on", "modifier_indicator": "0", "rationale": "Color flow Doppler included in 93306"}
+      ]
+    }
+  },
+  "mue_edits": {
+    "73721": {"max_units": 2, "rationale": "Bilateral knees possible, max 2 per day"},
+    "71260": {"max_units": 1, "rationale": "One chest CT with contrast per day"},
+    "29827": {"max_units": 2, "rationale": "Bilateral shoulders possible, max 2 per day"},
+    "45380": {"max_units": 1, "rationale": "One colonoscopy per day"},
+    "93306": {"max_units": 3, "rationale": "Repeat studies possible in acute settings"}
+  }
+}

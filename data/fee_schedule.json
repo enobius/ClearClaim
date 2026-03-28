@@ -1,0 +1,73 @@
+{
+  "metadata": {
+    "source": "Medicare Physician Fee Schedule",
+    "source_url": "https://pfs.data.cms.gov",
+    "year": 2025,
+    "notes": "Medicare fee schedule rates by geographic locality. Commercial payers typically reimburse 150-250% of Medicare rates."
+  },
+  "fee_schedule": {
+    "73721": {
+      "description": "MRI knee without contrast",
+      "national_payment_amount": 441.15,
+      "by_state": {
+        "CT": {"locality": "Connecticut", "mac_locality": "01", "fee": 466.30, "facility_fee": 198.42, "non_facility_fee": 466.30},
+        "TX": {"locality": "Texas", "mac_locality": "09", "fee": 418.55, "facility_fee": 188.12, "non_facility_fee": 418.55},
+        "CA": {"locality": "California (Los Angeles)", "mac_locality": "18", "fee": 502.87, "facility_fee": 213.44, "non_facility_fee": 502.87},
+        "FL": {"locality": "Florida", "mac_locality": "04", "fee": 432.18, "facility_fee": 194.22, "non_facility_fee": 432.18},
+        "NY": {"locality": "New York (Manhattan)", "mac_locality": "01", "fee": 498.62, "facility_fee": 211.88, "non_facility_fee": 498.62}
+      }
+    },
+    "71260": {
+      "description": "CT chest with contrast",
+      "national_payment_amount": 336.48,
+      "by_state": {
+        "CT": {"locality": "Connecticut", "mac_locality": "01", "fee": 355.72, "facility_fee": 145.33, "non_facility_fee": 355.72},
+        "TX": {"locality": "Texas", "mac_locality": "09", "fee": 341.76, "facility_fee": 139.64, "non_facility_fee": 341.76},
+        "CA": {"locality": "California (Los Angeles)", "mac_locality": "18", "fee": 383.41, "facility_fee": 156.66, "non_facility_fee": 383.41},
+        "FL": {"locality": "Florida", "mac_locality": "04", "fee": 329.88, "facility_fee": 134.79, "non_facility_fee": 329.88},
+        "NY": {"locality": "New York (Manhattan)", "mac_locality": "01", "fee": 380.19, "facility_fee": 155.34, "non_facility_fee": 380.19}
+      }
+    },
+    "29827": {
+      "description": "Arthroscopic rotator cuff repair",
+      "national_payment_amount": 1724.30,
+      "by_state": {
+        "CT": {"locality": "Connecticut", "mac_locality": "01", "fee": 1822.55, "facility_fee": 1822.55, "non_facility_fee": null},
+        "TX": {"locality": "Texas", "mac_locality": "09", "fee": 1635.88, "facility_fee": 1635.88, "non_facility_fee": null},
+        "CA": {"locality": "California (Los Angeles)", "mac_locality": "18", "fee": 1953.18, "facility_fee": 1953.18, "non_facility_fee": null},
+        "FL": {"locality": "Florida", "mac_locality": "04", "fee": 1688.42, "facility_fee": 1688.42, "non_facility_fee": null},
+        "NY": {"locality": "New York (Manhattan)", "mac_locality": "01", "fee": 1945.33, "facility_fee": 1945.33, "non_facility_fee": null}
+      }
+    },
+    "45380": {
+      "description": "Colonoscopy with biopsy",
+      "national_payment_amount": 504.22,
+      "by_state": {
+        "CT": {"locality": "Connecticut", "mac_locality": "01", "fee": 532.88, "facility_fee": 238.66, "non_facility_fee": 532.88},
+        "TX": {"locality": "Texas", "mac_locality": "09", "fee": 478.91, "facility_fee": 214.50, "non_facility_fee": 478.91},
+        "CA": {"locality": "California (Los Angeles)", "mac_locality": "18", "fee": 573.80, "facility_fee": 256.98, "non_facility_fee": 573.80},
+        "FL": {"locality": "Florida", "mac_locality": "04", "fee": 493.66, "facility_fee": 221.11, "non_facility_fee": 493.66},
+        "NY": {"locality": "New York (Manhattan)", "mac_locality": "01", "fee": 570.44, "facility_fee": 255.48, "non_facility_fee": 570.44}
+      }
+    },
+    "93306": {
+      "description": "Transthoracic echocardiogram complete",
+      "national_payment_amount": 383.56,
+      "by_state": {
+        "CT": {"locality": "Connecticut", "mac_locality": "01", "fee": 405.44, "facility_fee": 92.18, "non_facility_fee": 405.44},
+        "TX": {"locality": "Texas", "mac_locality": "09", "fee": 364.38, "facility_fee": 82.86, "non_facility_fee": 364.38},
+        "CA": {"locality": "California (Los Angeles)", "mac_locality": "18", "fee": 436.85, "facility_fee": 99.32, "non_facility_fee": 436.85},
+        "FL": {"locality": "Florida", "mac_locality": "04", "fee": 375.88, "facility_fee": 85.48, "non_facility_fee": 375.88},
+        "NY": {"locality": "New York (Manhattan)", "mac_locality": "01", "fee": 434.22, "facility_fee": 98.72, "non_facility_fee": 434.22}
+      }
+    }
+  },
+  "commercial_multipliers": {
+    "notes": "Commercial payers typically pay a multiple of Medicare rates. These are industry-standard estimates.",
+    "aetna_ppo": {"low": 1.6, "mid": 1.9, "high": 2.2},
+    "bcbs_ppo": {"low": 1.5, "mid": 1.8, "high": 2.1},
+    "unitedhealthcare": {"low": 1.7, "mid": 2.0, "high": 2.4},
+    "cigna": {"low": 1.5, "mid": 1.85, "high": 2.2},
+    "humana": {"low": 1.4, "mid": 1.7, "high": 2.0}
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "metadata": {
+    "source": "MOCK - Would require proprietary RCM data in production",
+    "notes": "Rule-based denial risk scoring. In production, this would be ML-trained on historical claims from Change Healthcare, Waystar, or similar clearinghouse data.",
+    "scoring_method": "additive_with_cap",
+    "scoring_formula": "total_denial_risk = min(0.95, base_rate + sum(risk_increase))",
+    "max_total_denial_risk": 0.95
+  },
+  "base_denial_rates": {
+    "73721": {"base_rate": 0.04, "category": "Advanced Imaging", "notes": "Low base denial for standard knee MRI"},
+    "71260": {"base_rate": 0.06, "category": "Advanced Imaging", "notes": "Slightly higher due to contrast authorization requirements"},
+    "29827": {"base_rate": 0.09, "category": "Surgical", "notes": "Higher base rate for elective orthopedic surgery"},
+    "45380": {"base_rate": 0.03, "category": "Diagnostic/Preventive", "notes": "Low denial rate when coded as diagnostic"},
+    "93306": {"base_rate": 0.05, "category": "Cardiac Diagnostic", "notes": "Moderate rate, medical necessity sometimes questioned"}
+  },
+  "risk_factors": {
+    "missing_prior_auth": {
+      "risk_increase": 0.30,
+      "description": "Prior authorization not obtained or not on file",
+      "fix": "Obtain prior authorization number from payer before submission",
+      "fix_risk_reduction": 0.28
+    },
+    "invalid_icd_cpt_pairing": {
+      "risk_increase": 0.25,
+      "description": "ICD-10 diagnosis does not support medical necessity for the CPT procedure",
+      "fix": "Review diagnosis codes and ensure clinical documentation supports the procedure",
+      "fix_risk_reduction": 0.23
+    },
+    "ncci_edit_violation": {
+      "risk_increase": 0.35,
+      "description": "CPT code pair flagged by NCCI PTP edits as unbundling",
+      "fix": "Remove conflicting code or apply appropriate modifier if clinically distinct",
+      "fix_risk_reduction": 0.33
+    },
+    "duplicate_claim": {
+      "risk_increase": 0.40,
+      "description": "Same CPT code billed for same patient on same date of service",
+      "fix": "Verify claim is not a duplicate; if bilateral, apply modifier 50 or RT/LT",
+      "fix_risk_reduction": 0.38
+    },
+    "out_of_network": {
+      "risk_increase": 0.15,
+      "description": "Provider is out of network for patient's plan",
+      "fix": "Verify network status or obtain gap exception from payer",
+      "fix_risk_reduction": 0.10
+    },
+    "timely_filing": {
+      "risk_increase": 0.20,
+      "description": "Claim approaching or past timely filing deadline",
+      "fix": "Submit claim immediately; if past deadline, file with proof of timely submission",
+      "fix_risk_reduction": 0.15
+    },
+    "missing_documentation": {
+      "risk_increase": 0.18,
+      "description": "Required clinical documentation not attached",
+      "fix": "Attach operative notes, clinical justification, or imaging reports",
+      "fix_risk_reduction": 0.16
+    },
+    "mue_exceeded": {
+      "risk_increase": 0.30,
+      "description": "Units of service exceed Medically Unlikely Edit threshold",
+      "fix": "Review units billed; if correct, append documentation supporting medical necessity",
+      "fix_risk_reduction": 0.25
+    }
+  },
+  "demo_scenarios": {
+    "knee_mri_clean": {
+      "cpt": "73721",
+      "state": "CT",
+      "payer": "aetna_ppo",
+      "risk_factors_present": [],
+      "total_denial_risk": 0.04,
+      "status": "LOW RISK",
+      "recommendation": "Claim is clean. Submit as-is."
+    },
+    "knee_mri_missing_auth": {
+      "cpt": "73721",
+      "state": "CT",
+      "payer": "aetna_ppo",
+      "risk_factors_present": ["missing_prior_auth"],
+      "total_denial_risk": 0.34,
+      "status": "HIGH RISK",
+      "recommendation": "Prior authorization missing. Aetna requires auth for advanced imaging. Obtain auth before submission to reduce risk to ~4%."
+    },
+    "chest_ct_bad_coding": {
+      "cpt": "71260",
+      "state": "TX",
+      "payer": "bcbs_ppo",
+      "risk_factors_present": ["missing_prior_auth", "invalid_icd_cpt_pairing"],
+      "total_denial_risk": 0.61,
+      "status": "CRITICAL RISK",
+      "recommendation": "Two issues found: (1) Prior auth not on file for CT imaging. (2) ICD-10 J18.9 may not meet medical necessity criteria without supporting documentation. Fix both before submission."
+    },
+    "rotator_cuff_ncci_violation": {
+      "cpt": "29827",
+      "state": "CA",
+      "payer": "unitedhealthcare_hmo",
+      "risk_factors_present": ["ncci_edit_violation"],
+      "additional_codes_billed": ["29826"],
+      "ncci_conflict": "29827 (rotator cuff repair) includes 29826 (acromioplasty) — cannot bill separately",
+      "total_denial_risk": 0.44,
+      "status": "HIGH RISK",
+      "recommendation": "NCCI edit conflict: CPT 29826 (acromioplasty) is bundled into 29827 (rotator cuff repair). Remove 29826 from claim. Risk drops to ~9%."
+    },
+    "colonoscopy_clean": {
+      "cpt": "45380",
+      "state": "FL",
+      "payer": "aetna_ppo",
+      "risk_factors_present": [],
+      "total_denial_risk": 0.03,
+      "status": "LOW RISK",
+      "recommendation": "No prior auth required. ICD K63.5 supports medical necessity. Clean claim."
+    },
+    "echo_missing_docs": {
+      "cpt": "93306",
+      "state": "NY",
+      "payer": "unitedhealthcare_hmo",
+      "risk_factors_present": ["missing_prior_auth", "missing_documentation"],
+      "total_denial_risk": 0.53,
+      "status": "HIGH RISK",
+      "recommendation": "Two issues: (1) UHC HMO requires prior auth for cardiac imaging. (2) Clinical documentation supporting heart failure diagnosis not attached. Fix both to reduce risk to ~5%."
+    }
+  }
+}
