@@ -5,6 +5,30 @@ Source alignment: `unified_build_guide_v2.docx` (Sections 3, 5, 7, 8)
 
 Process rule: Always update `research.md` after each meaningful implementation or validation step.
 
+## Part 2 Cleanup Update — 2026-03-29
+
+Status: Completed
+
+### Removed as unnecessary
+- `part2/screenshots/` (media artifacts)
+- `part2/.claude/`, `part2/.vscode/`, `part2/.DS_Store`
+- `part2/agents/` (legacy duplicate agent implementations)
+- `part2/prompts/` (legacy duplicate prompt module)
+- `part2/test_agent.py`, `part2/test_compute.py` (legacy standalone tests)
+- `part2/member_benefits.json`, `part2/pricing_data.json` (unused duplicates)
+- `part2/Data/__pycache__/`
+
+### Kept (runtime dependencies for merged adapter)
+- `part2/Data/compute.py`
+- `part2/Data/data.py`
+- `part2/Data/mock_benefits.py`
+- `part2/Data/__init__.py`
+- `part2/fee_schedule.json`
+- `part2/intergration_breifing.md`
+
+### Verification
+- `python graph.py` smoke tests still pass after cleanup.
+
 ## Remediation Update (Tech Lead Audit) — 2026-03-28
 
 Status: Completed
