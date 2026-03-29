@@ -46,6 +46,59 @@ Status: Completed
 - P2/P3 agent internals are still stubs in this branch; full end-to-end confidence depends on their real implementations.
 - `output_writer` defaulting can still mask incorrect agent output shapes; run strict key checks during merge validation.
 
+## Part 2 Merge Update (Adapter-First, Base Logic Preserved) — 2026-03-28
+
+Status: Completed
+
+### What was merged
+- Main contract remained unchanged (graph/UI schema frozen).
+- `agents/cost_predictor.py` now uses Part 2 compute engine as the calculation core:
+  - `part2.Data.compute.compute_estimate(...)` is called directly.
+  - Part 2 formulas were preserved (no calculation rewrite); only input/output adapters were added.
+- `agents/coverage_analyzer.py` kept its existing contract and still guarantees `benefits.prior_auth_required`.
+
+### Adapter mapping table (main contract -> Part 2 compute -> returned main state)
+| Main input key | Adapter value for P2 compute | Main output key |
+|---|---|---|
+| `patient_input.cpt_code` | `procedure` via CPT->procedure lookup | `cost_estimate.*`, `cms_rates`, `fee_schedule` |
+| `patient_input.zip_code` | `location` via ZIP prefix -> state name | `fee_schedule` locality selection + `cms_rates` filter |
+| `patient_input.insurance_type` | `insurance_plan` (`aetna_ppo->PPO`, `bcbs_ppo->PPO_BCBS`, `unitedhealthcare_hmo->HMO`) | `fee_schedule.commercial_estimate_*`, `cost_estimate.insurance_*` |
+| `patient_input.provider_type` | `provider` (`hospital->Hospital`, `imaging_center/asc->Private Clinic`) | `cost_estimate.total_*`, `cost_estimate.oop_*` |
+| `patient_input.urgency` | `urgency` (`routine/urgent/emergency` -> title-cased P2 values) | `cost_estimate.total_*` |
+| `benefits.*` (from coverage node) | prompt context only (deductible/coinsurance/prior auth) | `cost_estimate.explanation`, `cost_estimate.savings_tips` |
+
+### Output shape guarantees kept
+- `cost_predictor` returns only main expected keys:
+  - `cms_rates`
+  - `fee_schedule`
+  - `cost_estimate` (with nested `explanation` + `savings_tips`)
+  - `messages`
+- No top-level prior-auth output keys introduced.
+
+### Secret hygiene
+- Removed hardcoded Anthropic key line from `part2/agents/cost_predictor.py`.
+- Updated Part 2 compute imports to package-safe relative imports (`part2/Data/compute.py`) for mainline compatibility.
+- Repo scan for `sk-ant-` now returns no matches.
+
+### Verification results
+- `python graph.py` passes all smoke paths:
+  - patient
+  - hospital
+  - hospital re-eval
+- Adapter contract test passed:
+  - verified `cms_rates`, `fee_schedule`, `cost_estimate`, `messages` exist
+  - verified nested `cost_estimate.explanation` and `cost_estimate.savings_tips`
+- Coverage safety matrix passed:
+  - (`aetna_ppo`, `73721`)
+  - (`bcbs_ppo`, `71260`)
+  - (`unitedhealthcare_hmo`, `29827`)
+  - invalid plan fallback
+  - unknown CPT fallback
+
+### Notes
+- Base compute behavior changed output values versus old stub ranges (expected). Example patient OOP high moved from `370` (stub) to `349` (Part 2 compute result).
+- Streamlit manual re-check is still recommended after these adapter changes.
+
 ## Scope
 Person 1 owns:
 - LangGraph orchestration backbone (`graph.py` + supervisor routing)
@@ -142,7 +195,7 @@ Known environment note:
 
 ## Integration Checklist for P2/P3 Handoff
 
-- [ ] P2 replaces `agents/cost_predictor.py` stub internals with real loaders/compute/Claude flow
+- [x] P2 replaces `agents/cost_predictor.py` stub internals with adapter-based compute/fee/prompt flow (main contract preserved)
 - [x] Coverage analyzer is real JSON-backed and graph-integrated
 - [ ] P3 replaces `agents/denial_predictor.py` stub internals with real NCCI/risk/fix flow
 - [x] Graph edges validated for both modes and re-eval loop
