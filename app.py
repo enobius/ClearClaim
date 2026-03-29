@@ -5,6 +5,17 @@ import streamlit as st
 from graph import build_graph
 
 
+# ── Procedure name → CPT code mapping ────────────────────────────────────────
+# Matches the 5 scenarios in pricing_data.json and fee_schedule.json
+PROCEDURE_TO_CPT = {
+    "Knee MRI":                "73721",
+    "CT Scan (chest)":         "71260",
+    "Rotator Cuff Repair":     "29827",
+    "Colonoscopy with Biopsy": "45380",
+    "Echocardiogram":          "93306",
+}
+
+
 @st.cache_resource
 def get_graph_app():
     return build_graph()
@@ -111,7 +122,14 @@ def main() -> None:
 
         demo_loaded = st.session_state.get("patient_demo_loaded", False)
         with st.form("patient_form"):
-            cpt_code = st.text_input("CPT Code", value="73721" if demo_loaded else "")
+
+            # ── UPDATED: procedure dropdown replaces CPT code text input ──
+            procedure = st.selectbox(
+                "Procedure",
+                list(PROCEDURE_TO_CPT.keys()),
+                index=0,
+            )
+
             zip_code = st.text_input("ZIP Code", value="06604" if demo_loaded else "")
             insurance_type = st.selectbox("Insurance", ["aetna_ppo", "bcbs_ppo", "unitedhealthcare_hmo"], index=0)
             provider_type = st.selectbox("Provider Type", ["hospital", "imaging_center", "asc"], index=0)
@@ -120,14 +138,18 @@ def main() -> None:
             submit_patient = st.form_submit_button("Estimate Cost")
 
         if submit_patient:
+            # ── Look up CPT code from selected procedure name ─────────────
+            cpt_code = PROCEDURE_TO_CPT.get(procedure, "73721")
+
             payload = {
                 "mode": "patient",
                 "patient_input": {
-                    "cpt_code": cpt_code,
-                    "zip_code": zip_code,
-                    "insurance_type": insurance_type,
-                    "provider_type": provider_type,
-                    "urgency": urgency,
+                    "cpt_code":          cpt_code,       # required by graph.py validation
+                    "procedure":         procedure,       # human-readable name
+                    "zip_code":          zip_code,
+                    "insurance_type":    insurance_type,
+                    "provider_type":     provider_type,
+                    "urgency":           urgency,
                     "deductible_status": deductible_status,
                 },
                 "messages": [],
@@ -165,9 +187,9 @@ def main() -> None:
             payload = {
                 "mode": "hospital",
                 "hospital_input": {
-                    "cpt_code": cpt_code_h,
-                    "icd_code": icd_code,
-                    "payer": payer,
+                    "cpt_code":      cpt_code_h,
+                    "icd_code":      icd_code,
+                    "payer":         payer,
                     "clinical_note": clinical_note,
                 },
                 "messages": [],
