@@ -5,6 +5,39 @@ Source alignment: `unified_build_guide_v2.docx` (Sections 3, 5, 7, 8)
 
 Process rule: Always update `research.md` after each meaningful implementation or validation step.
 
+## Post-Merge Validation Review — 2026-03-29
+
+Status: Functional with residual risks (review-only)
+
+### Findings (severity ordered)
+- MEDIUM: Invalid CPT is tolerated rather than rejected
+  - `validate_entry` checks required fields but not CPT format/existence.
+  - Cost path falls back to defaults for unknown CPT instead of explicit validation error.
+  - References: `graph.py:175-191`, `agents/cost_predictor.py:74-76`, `agents/cost_predictor.py:102-110`.
+- MEDIUM: No-number policy is prompt-enforced but not runtime-enforced
+  - Prompt forbids invented numbers; response is not post-validated for numeric drift.
+  - References: `prompts/cost_prompt.py:29-33`, `agents/cost_predictor.py:237-250`.
+- LOW: Apply-fix missing-state path returns from `main()`
+  - Error path in Streamlit uses `return`, exiting current run early.
+  - Reference: `app.py:196-200`.
+
+### Integrity checks passed
+- State key contract consistency across cost/coverage/denial writers.
+- Re-eval payload persistence uses full `hospital_result` context.
+- Coverage fallback to `DEFAULT_PLAN` works.
+- Re-eval loop resets `reeval=False` after denial re-entry.
+- Security hygiene scan (`sk-ant-`) returned no matches.
+- `python graph.py` smoke tests pass all three flows.
+
+### Demo verification status (Knee MRI)
+- Patient mode: deterministic ranges + prior auth banner.
+- Hospital mode: ~34% risk.
+- Apply-fix loop: drops to ~4% and updates in-place.
+
+### Action recommendations before final rehearsal
+1. Add explicit CPT whitelist/format validation in `validate_entry`.
+2. Add lightweight runtime guard for explanation numeric drift if strict judge-proofing is required.
+
 ## Remediation Update (Tech Lead Audit) — 2026-03-28
 
 Status: Completed
@@ -142,7 +175,7 @@ Known environment note:
 
 ## Integration Checklist for P2/P3 Handoff
 
-- [ ] P2 replaces `agents/cost_predictor.py` stub internals with real loaders/compute/Claude flow
+- [x] P2 replaces `agents/cost_predictor.py` stub internals with adapter-based compute/fee/prompt flow (main contract preserved)
 - [x] Coverage analyzer is real JSON-backed and graph-integrated
 - [ ] P3 replaces `agents/denial_predictor.py` stub internals with real NCCI/risk/fix flow
 - [x] Graph edges validated for both modes and re-eval loop
@@ -153,3 +186,88 @@ Known environment note:
 1. Coordinate with P2/P3 on exact output key shapes to keep strict state contract stable.
 2. Run one full end-to-end demo after P2/P3 internals are merged.
 3. Keep updating this file after each merge/test cycle.
+
+## Person 1 Hardening + Regression Update - 2026-03-29
+
+Status: Completed
+
+### Implemented fixes (residual issues)
+- Strict CPT validation in orchestration (`graph.py`)
+  - Added 5-digit CPT regex validation in `validate_entry`.
+  - Added supported CPT whitelist validation: `73721`, `71260`, `29827`, `45380`, `93306`.
+  - Invalid CPT now fails fast with clear `ValueError` messages.
+- Runtime no-number guard in cost explanation (`agents/cost_predictor.py`)
+  - Added numeric token extraction/normalization guard for explanation text.
+  - Allowed numbers are constrained to deterministic inputs (CPT, rates/ranges, deductible, coinsurance, submitted charge).
+  - If drift is detected, explanation is replaced with safe fallback and a system message is added.
+- Streamlit apply-fix UX safety (`app.py`)
+  - Missing `hospital_result` branch now shows an error and skips re-eval invoke without exiting the page flow.
+  - Re-eval still uses `hospital_result` as payload base.
+
+### Regression acceptance criteria (release gate)
+- [x] `python graph.py` smoke tests pass (patient, hospital, hospital re-eval).
+- [x] Invalid CPT inputs fail fast with explicit validation errors.
+- [x] No-number guard accepts valid explanation numbers and rejects out-of-band numbers.
+- [x] 5 canonical patient regression scenarios match exact expected outputs.
+- [x] Hospital apply-fix path remains stable (stub behavior: ~34% to ~4%).
+
+### Test run log (2026-03-29)
+- Command: `python graph.py`
+  - Result: PASS
+  - Notes: All 3 smoke scenarios passed. Re-eval risk remained 34% -> 4%.
+- Command: `python -m py_compile graph.py agents/cost_predictor.py app.py`
+  - Result: PASS
+- Deterministic 5-case regression suite (graph invoke, patient mode)
+  - Knee MRI / Aetna / CT baseline: PASS
+  - Chest CT / BCBS / TX urgent: PASS
+  - Rotator cuff / UHC HMO / CA emergency: PASS
+  - Colonoscopy / BCBS / FL routine imaging center: PASS
+  - Echo / Aetna / NY routine ASC: PASS
+- Negative CPT validation suite
+  - `7372`: PASS (rejected; must be 5-digit)
+  - `ABC12`: PASS (rejected; must be 5-digit)
+  - `99999`: PASS (rejected; unsupported CPT list)
+- No-number guard unit checks
+  - Allowed-number explanation: PASS
+  - Injected out-of-band number: PASS (fallback explanation applied)
+
+### Pass/fail template for future runs
+Use this block each cycle:
+
+```
+Run date:
+Commit/ref:
+
+1) Smoke (`python graph.py`):
+- Patient:
+- Hospital:
+- Hospital re-eval:
+
+2) CPT validation negatives:
+- non-5-digit numeric:
+- alphanumeric:
+- unsupported 5-digit:
+
+3) No-number guard:
+- allowed-numbers case:
+- injected-number case:
+
+4) 5-case deterministic regression:
+- 73721 / 06604 / aetna_ppo / hospital / routine / partially_met:
+- 71260 / 77030 / bcbs_ppo / hospital / urgent / not_met:
+- 29827 / 90048 / unitedhealthcare_hmo / hospital / emergency / not_met:
+- 45380 / 33136 / bcbs_ppo / imaging_center / routine / fully_met:
+- 93306 / 10016 / aetna_ppo / asc / routine / partially_met:
+
+Overall release gate: PASS/FAIL
+Blocking issues:
+```
+
+## UI Hotfix - Hospital Risk Refresh - 2026-03-29
+
+Status: Completed
+
+- Issue: Hospital denial risk metric did not visually update immediately after Apply Fix.
+- Root cause: `render_hospital_result(...)` ran before re-eval completed in the same Streamlit rerun.
+- Fix: Added `st.rerun()` after storing re-evaluated state in `app.py` Apply Fix handler.
+- Expected behavior now: clicking Apply Fix updates session state and immediately rerenders top-level denial risk metric with new value.

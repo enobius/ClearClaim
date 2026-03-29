@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import operator
 import os
+import re
 from typing import Annotated, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -20,6 +21,7 @@ from agents.supervisor import supervisor as module_supervisor
 
 
 USE_STUB_AGENTS = os.getenv("USE_STUB_AGENTS", "0") == "1"
+SUPPORTED_CPTS = {"73721", "71260", "29827", "45380", "93306"}
 
 
 class PatientInput(TypedDict, total=False):
@@ -172,23 +174,38 @@ def _require_fields(payload: dict, required: list[str], label: str) -> None:
         raise ValueError(f"{label} missing required fields: {', '.join(missing)}")
 
 
+def _validate_cpt(cpt_code: str, label: str) -> None:
+    value = str(cpt_code).strip()
+    if not re.fullmatch(r"\d{5}", value):
+        raise ValueError(f"{label} cpt_code must be a 5-digit code.")
+    if value not in SUPPORTED_CPTS:
+        raise ValueError(
+            f"{label} cpt_code '{value}' is not supported in this build. "
+            f"Supported CPTs: {', '.join(sorted(SUPPORTED_CPTS))}."
+        )
+
+
 def validate_entry(state: GraphState) -> dict:
     mode = state.get("mode")
     if mode not in ("patient", "hospital"):
         raise ValueError("mode must be 'patient' or 'hospital'")
 
     if mode == "patient":
+        patient_input = state.get("patient_input", {})
         _require_fields(
-            state.get("patient_input", {}),
+            patient_input,
             ["cpt_code", "zip_code", "insurance_type", "provider_type", "urgency", "deductible_status"],
             "patient_input",
         )
+        _validate_cpt(str(patient_input.get("cpt_code", "")), "patient_input")
     else:
+        hospital_input = state.get("hospital_input", {})
         _require_fields(
-            state.get("hospital_input", {}),
+            hospital_input,
             ["cpt_code", "icd_code", "payer", "clinical_note"],
             "hospital_input",
         )
+        _validate_cpt(str(hospital_input.get("cpt_code", "")), "hospital_input")
 
     return {"messages": [{"role": "system", "content": "Entry validation passed."}]}
 

@@ -196,23 +196,23 @@ def main() -> None:
                         current_result = st.session_state.hospital_result
                         if not current_result:
                             st.error("No hospital result found. Run denial prediction before applying a fix.")
-                            return
+                        else:
+                            updated_fixes = [dict(fix) for fix in fix_list]
+                            updated_fixes[selected_idx]["applied"] = True
 
-                        updated_fixes = [dict(fix) for fix in fix_list]
-                        updated_fixes[selected_idx]["applied"] = True
+                            reeval_payload = dict(current_result)
+                            reeval_payload["fix_list"] = updated_fixes
+                            reeval_payload["reeval"] = True
+                            reeval_payload["messages"] = []
 
-                        reeval_payload = dict(current_result)
-                        reeval_payload["fix_list"] = updated_fixes
-                        reeval_payload["reeval"] = True
-                        reeval_payload["messages"] = []
+                            with st.spinner("Re-running denial scoring with applied fix..."):
+                                reevaluated = app.invoke(reeval_payload)
+                                st.session_state.hospital_result = reevaluated
 
-                        with st.spinner("Re-running denial scoring with applied fix..."):
-                            reevaluated = app.invoke(reeval_payload)
-                            st.session_state.hospital_result = reevaluated
-
-                        old_risk = float(st.session_state.hospital_pre_risk or 0.0)
-                        new_risk = float(reevaluated.get("denial_score", {}).get("risk_pct", 0.0))
-                        st.success(f"Risk updated: {old_risk:.0%} -> {new_risk:.0%}")
+                            old_risk = float(st.session_state.hospital_pre_risk or 0.0)
+                            new_risk = float(reevaluated.get("denial_score", {}).get("risk_pct", 0.0))
+                            st.success(f"Risk updated: {old_risk:.0%} -> {new_risk:.0%}")
+                            st.rerun()
                     except Exception as exc:
                         st.error(f"Re-evaluation failed: {exc}")
 

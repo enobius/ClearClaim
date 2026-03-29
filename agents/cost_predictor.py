@@ -1,257 +1,358 @@
 """
-Cost Predictor Agent — Person 2
-=================================
-READS:  state["patient_input"] → {cpt_code, zip_code, insurance_type, provider_type}
-        state["benefits"]      → {deductible_remaining, coinsurance, prior_auth_required}
-WRITES: state["cms_rates"]     → {providers, min_rate, max_rate}
-        state["fee_schedule"]  → {medicare_rate, facility_fee, non_facility_fee,
-                                   commercial_estimate_low/mid/high}
-        state["cost_estimate"] → {total_low, total_high, oop_low, oop_high,
-                                   insurance_low, insurance_high, explanation, savings_tips}
-        state["messages"]
+Cost Predictor Agent
+====================
+Adapter layer around Part 2 compute logic while preserving main graph/UI contract.
 """
+
+from __future__ import annotations
 
 import json
 import os
-from dotenv import load_dotenv
+import re
+from functools import lru_cache
+from pathlib import Path
 
-load_dotenv()
-
-
-# ── Data loaders ──────────────────────────────────────────────────────────────
-
-def load_pricing_data():
-    path = os.path.join(os.path.dirname(__file__), "../data/pricing_data.json")
-    with open(path, "r") as f:
-        return json.load(f)
-
-def load_fee_schedule():
-    path = os.path.join(os.path.dirname(__file__), "../data/fee_schedule.json")
-    with open(path, "r") as f:
-        return json.load(f)
+from part2.Data.compute import compute_estimate
+from part2.Data.data import PROCEDURES
+from prompts.cost_prompt import build_cost_prompt
 
 
-# ── CPT → scenario key mapper ─────────────────────────────────────────────────
+ROOT = Path(__file__).resolve().parent.parent
+PRICING_DATA_PATH = ROOT / "data" / "pricing_data.json"
+FEE_SCHEDULE_PATH = ROOT / "data" / "fee_schedule.json"
 
-CPT_TO_SCENARIO = {
-    "73721": "knee_mri",
-    "71260": "chest_ct",
-    "29827": "rotator_cuff_repair",
-    "45380": "colonoscopy_biopsy",
-    "93306": "echocardiogram",
+ZIP_PREFIX_TO_STATE = {
+    "06": ("Connecticut", "CT"),
+    "75": ("Texas", "TX"),
+    "76": ("Texas", "TX"),
+    "77": ("Texas", "TX"),
+    "90": ("California", "CA"),
+    "91": ("California", "CA"),
+    "92": ("California", "CA"),
+    "93": ("California", "CA"),
+    "94": ("California", "CA"),
+    "10": ("New York", "NY"),
+    "11": ("New York", "NY"),
+    "32": ("Florida", "FL"),
+    "33": ("Florida", "FL"),
 }
 
-# zip code prefix → state code
-ZIP_TO_STATE = {
-    "06": "CT",
-    "07": "CT",
-    "75": "TX",
-    "77": "TX",
-    "78": "TX",
-    "90": "CA",
-    "91": "CA",
-    "92": "CA",
-    "94": "CA",
-    "33": "FL",
-    "32": "FL",
-    "10": "NY",
-    "11": "NY",
+INSURANCE_TO_P2 = {
+    "aetna_ppo": "PPO",
+    "bcbs_ppo": "PPO_BCBS",
+    "unitedhealthcare_hmo": "HMO",
 }
 
-def zip_to_state(zip_code: str) -> str:
-    prefix = str(zip_code)[:2]
-    return ZIP_TO_STATE.get(prefix, "CT")  # default CT
+PROVIDER_TO_P2 = {
+    "hospital": "Hospital",
+    "imaging_center": "Private Clinic",
+    "asc": "Private Clinic",
+}
+
+URGENCY_TO_P2 = {
+    "routine": "Routine",
+    "urgent": "Urgent",
+    "emergency": "Emergency",
+}
+
+CPT_TO_PROCEDURE = {details["cpt"]: name for name, details in PROCEDURES.items()}
 
 
-# ── CMS rates lookup ──────────────────────────────────────────────────────────
+@lru_cache(maxsize=1)
+def _load_pricing_data() -> dict:
+    with PRICING_DATA_PATH.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
-def get_cms_rates(cpt_code: str, zip_code: str) -> dict:
-    pricing = load_pricing_data()
-    state = zip_to_state(zip_code)
-    scenarios = pricing.get("scenarios", {})
-    scenario_key = CPT_TO_SCENARIO.get(cpt_code)
 
-    if not scenario_key or scenario_key not in scenarios:
-        return {"providers": [], "min_rate": 0.0, "max_rate": 0.0, "state": state}
+@lru_cache(maxsize=1)
+def _load_fee_schedule() -> dict:
+    with FEE_SCHEDULE_PATH.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
-    scenario = scenarios[scenario_key]
-    providers = scenario.get("providers", [])
 
-    # Filter by state if possible
-    state_providers = [p for p in providers if p.get("provider_state") == state]
-    if not state_providers:
-        state_providers = providers  # fallback to all providers
+def _infer_state(zip_code: str) -> tuple[str, str]:
+    prefix = str(zip_code).strip()[:2]
+    return ZIP_PREFIX_TO_STATE.get(prefix, ("Connecticut", "CT"))
 
-    rates = [p["avg_medicare_allowed_amt"] for p in state_providers]
+
+def _find_scenario_by_cpt(cpt_code: str) -> dict:
+    scenarios = _load_pricing_data().get("scenarios", {})
+    for scenario in scenarios.values():
+        if scenario.get("cpt_code") == cpt_code:
+            return scenario
+    return {}
+
+
+def _build_cms_rates(cpt_code: str, state_abbrev: str) -> dict:
+    scenario = _find_scenario_by_cpt(cpt_code)
+    providers = [
+        provider
+        for provider in scenario.get("providers", [])
+        if provider.get("provider_state") == state_abbrev
+    ]
+
+    if not providers:
+        providers = scenario.get("providers", [])
+
+    allowed_amounts = [float(p.get("avg_medicare_allowed_amt", 0.0)) for p in providers]
+    min_rate = min(allowed_amounts) if allowed_amounts else 0.0
+    max_rate = max(allowed_amounts) if allowed_amounts else 0.0
+
     return {
-        "providers": state_providers,
-        "min_rate": min(rates) if rates else 0.0,
-        "max_rate": max(rates) if rates else 0.0,
-        "state": state
+        "providers": providers,
+        "min_rate": min_rate,
+        "max_rate": max_rate,
     }
 
 
-# ── Fee schedule lookup ───────────────────────────────────────────────────────
+def _build_fee_schedule(cpt_code: str, state_abbrev: str, insurance_type: str) -> dict:
+    payload = _load_fee_schedule()
+    cpt_block = payload.get("fee_schedule", {}).get(cpt_code, {})
+    state_block = cpt_block.get("by_state", {}).get(state_abbrev, {})
 
-def get_fee_schedule(cpt_code: str, zip_code: str, insurance_type: str) -> dict:
-    schedule = load_fee_schedule()
-    state = zip_to_state(zip_code)
-    fee_data = schedule.get("fee_schedule", {})
-    multipliers = schedule.get("commercial_multipliers", {})
+    medicare_rate = float(state_block.get("fee", cpt_block.get("national_payment_amount", 0.0)))
+    facility_fee = float(state_block.get("facility_fee", 0.0) or 0.0)
+    non_facility_fee = float(state_block.get("non_facility_fee", medicare_rate) or medicare_rate)
 
-    if cpt_code not in fee_data:
-        return {
-            "medicare_rate": 0.0,
-            "facility_fee": 0.0,
-            "non_facility_fee": 0.0,
-            "commercial_estimate_low": 0.0,
-            "commercial_estimate_mid": 0.0,
-            "commercial_estimate_high": 0.0,
-        }
-
-    cpt_fees = fee_data[cpt_code]
-    state_fees = cpt_fees.get("by_state", {}).get(state, {})
-    medicare_rate = state_fees.get("fee", cpt_fees.get("national_payment_amount", 0.0))
-    facility_fee = state_fees.get("facility_fee", 0.0) or 0.0
-    non_facility_fee = state_fees.get("non_facility_fee", 0.0) or 0.0
-
-    # Get commercial multipliers for this payer
-    payer_key = insurance_type.replace("_ppo", "").replace("_hmo", "")
-    payer_multipliers = multipliers.get(insurance_type,
-                        multipliers.get(payer_key,
-                        {"low": 1.6, "mid": 1.9, "high": 2.2}))
+    multipliers = payload.get("commercial_multipliers", {}).get(
+        insurance_type,
+        payload.get("commercial_multipliers", {}).get("aetna_ppo", {"low": 1.6, "mid": 1.9, "high": 2.2}),
+    )
 
     return {
         "medicare_rate": medicare_rate,
         "facility_fee": facility_fee,
         "non_facility_fee": non_facility_fee,
-        "commercial_estimate_low":  round(medicare_rate * payer_multipliers["low"], 2),
-        "commercial_estimate_mid":  round(medicare_rate * payer_multipliers["mid"], 2),
-        "commercial_estimate_high": round(medicare_rate * payer_multipliers["high"], 2),
+        "commercial_estimate_low": round(medicare_rate * float(multipliers.get("low", 1.6)), 2),
+        "commercial_estimate_mid": round(medicare_rate * float(multipliers.get("mid", 1.9)), 2),
+        "commercial_estimate_high": round(medicare_rate * float(multipliers.get("high", 2.2)), 2),
     }
 
 
-# ── Cost estimate calculator ──────────────────────────────────────────────────
-
-def compute_estimate(fee_schedule: dict, benefits: dict) -> dict:
-    """
-    Compute out-of-pocket and insurance split from fee schedule + benefits.
-    Claude NEVER generates these numbers — pure deterministic math.
-    """
-    total_low  = fee_schedule["commercial_estimate_low"]
-    total_high = fee_schedule["commercial_estimate_high"]
-
-    deductible_remaining = float(benefits.get("deductible_remaining", 0.0))
-    coinsurance          = float(benefits.get("coinsurance", 0.20))
-
-    def calc_oop(total: float) -> float:
-        oop = min(deductible_remaining, total)
-        remainder = total - oop
-        oop += remainder * coinsurance
-        return round(oop, 2)
-
-    oop_low  = calc_oop(total_low)
-    oop_high = calc_oop(total_high)
-
-    return {
-        "total_low":      round(total_low, 2),
-        "total_high":     round(total_high, 2),
-        "oop_low":        oop_low,
-        "oop_high":       oop_high,
-        "insurance_low":  round(total_low - oop_low, 2),
-        "insurance_high": round(total_high - oop_high, 2),
-    }
-
-
-# ── Claude API call ───────────────────────────────────────────────────────────
-
-def call_claude(prompt: str) -> str:
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+def _call_claude_explainer(prompt: str) -> tuple[str, list[str]]:
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        return "STUB: Claude explanation unavailable — API key not set."
+        return (
+            "Estimate generated from deterministic pricing and benefits data. "
+            "Set ANTHROPIC_API_KEY to enable narrative explanation.",
+            [
+                "Compare imaging center and hospital options in-network.",
+                "Confirm prior authorization before scheduling.",
+                "Ask for an itemized estimate before the visit.",
+            ],
+        )
+
     try:
         import anthropic
+
         client = anthropic.Anthropic(api_key=api_key)
-        message = client.messages.create(
+        response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
+            temperature=0,
+            messages=[{"role": "user", "content": prompt}],
         )
-        return message.content[0].text
-    except Exception as e:
-        return f"Explanation unavailable: {str(e)}"
+        text = response.content[0].text.strip()
+    except Exception as exc:
+        return (
+            f"Explanation unavailable from Claude API: {exc}",
+            [
+                "Compare imaging center and hospital options in-network.",
+                "Confirm prior authorization before scheduling.",
+                "Ask for an itemized estimate before the visit.",
+            ],
+        )
+
+    explanation = text
+    tips: list[str] = []
+
+    marker = "SAVINGS_TIPS:"
+    if marker in text:
+        before, after = text.split(marker, 1)
+        explanation = before.replace("EXPLANATION:", "").strip()
+        for line in after.splitlines():
+            cleaned = line.strip().lstrip("- ").strip()
+            if cleaned:
+                tips.append(cleaned)
+
+    if not tips:
+        tips = [
+            "Compare imaging center and hospital options in-network.",
+            "Confirm prior authorization before scheduling.",
+            "Ask for an itemized estimate before the visit.",
+        ]
+
+    return explanation, tips[:3]
 
 
-# ── Main Agent Function ───────────────────────────────────────────────────────
+def _normalize_numeric_token(token: str) -> str:
+    token = token.strip().replace(",", "")
+    if not token:
+        return ""
+    if token.endswith("%"):
+        base = token[:-1]
+        try:
+            val = float(base)
+            if val.is_integer():
+                return f"{int(val)}%"
+            return f"{val}%"
+        except ValueError:
+            return token
+    try:
+        val = float(token)
+        if val.is_integer():
+            return str(int(val))
+        return f"{val:.6f}".rstrip("0").rstrip(".")
+    except ValueError:
+        return token
+
+
+def _extract_numeric_tokens(text: str) -> set[str]:
+    matches = re.findall(r"\d+(?:,\d{3})*(?:\.\d+)?%?", text or "")
+    return {_normalize_numeric_token(m) for m in matches if m.strip()}
+
+
+def _allowed_numeric_tokens(
+    cpt_code: str,
+    medicare_rate: float,
+    commercial_estimate_low: float,
+    commercial_estimate_mid: float,
+    commercial_estimate_high: float,
+    deductible_remaining: float,
+    coinsurance: float,
+    oop_low: float,
+    oop_high: float,
+    submitted_charge: float,
+) -> set[str]:
+    allowed = {_normalize_numeric_token(str(cpt_code))}
+
+    def add_num(value: float) -> None:
+        val = float(value)
+        allowed.add(_normalize_numeric_token(str(val)))
+        allowed.add(_normalize_numeric_token(f"{val:.2f}"))
+        allowed.add(_normalize_numeric_token(str(int(round(val)))))
+
+    for value in (
+        medicare_rate,
+        commercial_estimate_low,
+        commercial_estimate_mid,
+        commercial_estimate_high,
+        deductible_remaining,
+        oop_low,
+        oop_high,
+        submitted_charge,
+    ):
+        add_num(value)
+
+    pct = float(coinsurance) * 100
+    allowed.add(_normalize_numeric_token(f"{pct}%"))
+    allowed.add(_normalize_numeric_token(f"{int(round(pct))}%"))
+    return allowed
+
+
+def _guard_explanation_numbers(explanation: str, allowed_tokens: set[str]) -> tuple[str, bool]:
+    observed = _extract_numeric_tokens(explanation)
+    for token in observed:
+        if token in {"1", "2", "3", "1%", "2%", "3%"}:
+            continue
+        if token not in allowed_tokens:
+            return (
+                "Estimate generated from deterministic pricing and benefits data. "
+                "Narrative explanation was replaced to enforce numeric integrity.",
+                True,
+            )
+    return explanation, False
+
 
 def cost_predictor(state: dict) -> dict:
-    """
-    Main cost predictor agent — called by LangGraph.
-    Matches P1's contract exactly.
-    """
-    from prompts.cost_prompt import build_cost_prompt
+    patient_input = state.get("patient_input", {})
+    benefits = state.get("benefits", {})
 
-    # ── Read inputs ──
-    patient_input  = state.get("patient_input", {})
-    cpt_code       = str(patient_input.get("cpt_code", "73721")).strip()
-    zip_code       = str(patient_input.get("zip_code", "06604")).strip()
-    insurance_type = str(patient_input.get("insurance_type", "aetna_ppo")).strip()
-    provider_type  = str(patient_input.get("provider_type", "outpatient")).strip()
-    benefits       = state.get("benefits", {})
+    cpt_code = str(patient_input.get("cpt_code", "73721")).strip() or "73721"
+    zip_code = str(patient_input.get("zip_code", "06604")).strip() or "06604"
+    insurance_type = str(patient_input.get("insurance_type", "aetna_ppo")).strip() or "aetna_ppo"
+    provider_type = str(patient_input.get("provider_type", "hospital")).strip() or "hospital"
+    urgency = str(patient_input.get("urgency", "routine")).strip() or "routine"
 
-    # ── Step 1: CMS rates lookup ──
-    cms_rates = get_cms_rates(cpt_code, zip_code)
+    procedure_name = CPT_TO_PROCEDURE.get(cpt_code, "Knee MRI")
+    state_name, state_abbrev = _infer_state(zip_code)
+    provider_for_p2 = PROVIDER_TO_P2.get(provider_type, "Hospital")
+    insurance_for_p2 = INSURANCE_TO_P2.get(insurance_type, "PPO")
+    urgency_for_p2 = URGENCY_TO_P2.get(urgency, "Routine")
 
-    # ── Step 2: Fee schedule lookup ──
-    fee_schedule = get_fee_schedule(cpt_code, zip_code, insurance_type)
+    # Base compute logic preserved from Part 2.
+    computed = compute_estimate(
+        procedure=procedure_name,
+        location=state_name,
+        provider=provider_for_p2,
+        insurance_plan=insurance_for_p2,
+        urgency=urgency_for_p2,
+    )
 
-    # ── Step 3: Compute estimate ──
-    estimate = compute_estimate(fee_schedule, benefits)
-
-    # ── Step 4: Claude explanation ──
-    pricing = load_pricing_data()
-    scenario_key = CPT_TO_SCENARIO.get(cpt_code, "")
-    scenario = pricing.get("scenarios", {}).get(scenario_key, {})
-    procedure_name = scenario.get("description", f"CPT {cpt_code}")
-
-    state_code = zip_to_state(zip_code)
-    provider_name = cms_rates["providers"][0]["provider_name"] if cms_rates["providers"] else ""
+    cms_rates = _build_cms_rates(cpt_code, state_abbrev)
+    fee_schedule = _build_fee_schedule(cpt_code, state_abbrev, insurance_type)
+    submitted_charge = float((cms_rates.get("providers") or [{}])[0].get("avg_submitted_chrg_amt", 0.0))
 
     prompt = build_cost_prompt(
         procedure_name=procedure_name,
         cpt_code=cpt_code,
-        state_name=state_code,
+        state_name=state_name,
+        medicare_rate=float(fee_schedule["medicare_rate"]),
+        commercial_estimate_low=float(fee_schedule["commercial_estimate_low"]),
+        commercial_estimate_mid=float(fee_schedule["commercial_estimate_mid"]),
+        commercial_estimate_high=float(fee_schedule["commercial_estimate_high"]),
+        deductible_remaining=float(benefits.get("deductible_remaining", computed.get("remaining_deductible", 0.0))),
+        coinsurance=float(benefits.get("coinsurance", 0.20)),
+        oop_low=float(computed.get("oop_low", 0.0)),
+        oop_high=float(computed.get("oop_high", 0.0)),
+        prior_auth_required=bool(benefits.get("prior_auth_required", False)),
+        provider_name=(cms_rates.get("providers") or [{}])[0].get("provider_name", ""),
+        submitted_charge=submitted_charge,
+    )
+
+    explanation, savings_tips = _call_claude_explainer(prompt)
+    allowed_tokens = _allowed_numeric_tokens(
+        cpt_code=cpt_code,
         medicare_rate=fee_schedule["medicare_rate"],
         commercial_estimate_low=fee_schedule["commercial_estimate_low"],
         commercial_estimate_mid=fee_schedule["commercial_estimate_mid"],
         commercial_estimate_high=fee_schedule["commercial_estimate_high"],
-        deductible_remaining=float(benefits.get("deductible_remaining", 0.0)),
+        deductible_remaining=float(benefits.get("deductible_remaining", computed.get("remaining_deductible", 0.0))),
         coinsurance=float(benefits.get("coinsurance", 0.20)),
-        oop_low=estimate["oop_low"],
-        oop_high=estimate["oop_high"],
-        prior_auth_required=bool(benefits.get("prior_auth_required", False)),
-        provider_name=provider_name,
-        submitted_charge=cms_rates["providers"][0]["avg_submitted_chrg_amt"] if cms_rates["providers"] else 0.0,
+        oop_low=float(computed.get("oop_low", 0.0)),
+        oop_high=float(computed.get("oop_high", 0.0)),
+        submitted_charge=submitted_charge,
     )
+    explanation, drift_detected = _guard_explanation_numbers(explanation, allowed_tokens)
 
-    claude_response = call_claude(prompt)
+    cost_estimate = {
+        "total_low": float(computed.get("total_low", 0.0)),
+        "total_high": float(computed.get("total_high", 0.0)),
+        "oop_low": float(computed.get("oop_low", 0.0)),
+        "oop_high": float(computed.get("oop_high", 0.0)),
+        "insurance_low": float(computed.get("insurance_low", 0.0)),
+        "insurance_high": float(computed.get("insurance_high", 0.0)),
+        "explanation": explanation,
+        "savings_tips": savings_tips,
+    }
 
-    # ── Parse Claude response into explanation + savings_tips ──
-    explanation = claude_response
-    savings_tips = []
-
-    if "SAVINGS_TIPS:" in claude_response:
-        parts = claude_response.split("SAVINGS_TIPS:")
-        explanation = parts[0].replace("EXPLANATION:", "").strip()
-        tips_raw = parts[1].strip().split("\n")
-        savings_tips = [t.strip().lstrip("0123456789.-) ") for t in tips_raw if t.strip()]
-
-    estimate["explanation"]  = explanation
-    estimate["savings_tips"] = savings_tips
+    messages = [
+        {
+            "role": "system",
+            "content": f"Cost predictor: computed Part 2 estimate for CPT {cpt_code} in {state_abbrev}.",
+        }
+    ]
+    if drift_detected:
+        messages.append(
+            {
+                "role": "system",
+                "content": "Cost predictor: explanation numeric drift detected and replaced with safe fallback.",
+            }
+        )
 
     return {
-        "cms_rates":    cms_rates,
+        "cms_rates": cms_rates,
         "fee_schedule": fee_schedule,
-        "cost_estimate": estimate,
-        "messages": [{"role": "system", "content": f"Cost predictor: {procedure_name} estimate complete."}]
+        "cost_estimate": cost_estimate,
+        "messages": messages,
     }
