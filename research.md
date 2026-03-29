@@ -252,3 +252,174 @@ Additional cleanup:
 Validation:
 - `python -m py_compile agents/cost_predictor.py app.py graph.py` -> PASS
 - `python graph.py` smoke suite -> PASS (patient, hospital, hospital re-eval)
+
+## UI Mockup Realignment Update - 2026-03-29
+
+Status: Completed
+
+Context:
+- The previous UI pass aligned to older build-guide mockups, not the current target mockups.
+
+Changes applied in `app.py`:
+- Added dark-shell visual system with left icon rail, top chips, and card hierarchy matching current mockups.
+- Patient mode now renders:
+  - 4 KPI cards (estimated total, insurance covers, you pay, coverage split),
+  - Prior-auth banner card,
+  - AI explanation card,
+  - "Ways to reduce costs" table card.
+- Hospital mode now renders:
+  - top triad cards (denial risk score, NCCI validation, risk factors),
+  - issues panel,
+  - fix list panel with emphasized risk-reduction chip,
+  - apply-fix flow preserved.
+- Kept orchestration and state contract unchanged; this is presentation-layer refactor only.
+- Preserved apply-fix re-eval behavior and immediate UI refresh via `st.rerun()`.
+
+Validation:
+- `python -m py_compile app.py` -> PASS
+
+## Patient KPI Display Correction - 2026-03-29
+
+Status: Completed
+
+Issue:
+- Patient "Estimated total" card displayed inflated values by reading `cost_estimate.total_*` directly.
+
+Fix in `app.py`:
+- Updated patient KPI display math to use `insurance + oop` ranges for user-facing total:
+  - `display_total_low = insurance_low + oop_low`
+  - `display_total_high = insurance_high + oop_high`
+  - midpoint shown in the headline value.
+- Updated coverage share math to use the same display-total denominator for consistency.
+
+Result:
+- Knee MRI display now aligns with expected mockup behavior (midpoint around the combined payer+patient burden instead of the larger internal total range).
+
+Validation:
+- `python -m py_compile app.py` -> PASS
+
+## Total vs Sum Math Review - 2026-03-29
+
+Status: Review completed
+
+Findings:
+- `part2/Data/compute.py` intentionally computes `total_*` and (`insurance_*`, `oop_*`) from different bases:
+  - `total_*` from procedure benchmark ranges and provider/urgency multipliers.
+  - `insurance_*`/`oop_*` from state Medicare fee * payer multipliers + deductible/coinsurance logic.
+- This means `total_*` is not guaranteed to equal `insurance_* + oop_*` by design.
+- UI trust risk exists if cards present these as one strict accounting equation.
+
+Current mitigation:
+- `app.py` patient KPI display now uses `insurance + oop` for the headline/display total to avoid visual mismatch with component cards.
+
+Recommended contract clarification:
+- Keep both concepts explicitly named in state:
+  - `total_*` = market/charge estimate range
+  - `payable_total_*` = `insurance_* + oop_*` (accounting total used by KPI/split cards)
+- Add regression assertion to prevent future drift between displayed total and split components.
+
+## Payable-Total Contract Alignment - 2026-03-29
+
+Status: Completed
+
+Scope decision:
+- Active frontend is `../Clear Claim UI`.
+- `app.py` intentionally excluded from this implementation pass.
+
+Implemented changes:
+1) Backend source-of-truth (`agents/cost_predictor.py`)
+- Added `_enforce_payable_total_contract(...)` at output boundary.
+- `cost_estimate.total_low/high` now set to:
+  - `insurance_low + oop_low`
+  - `insurance_high + oop_high`
+- Preserved component values (`insurance_*`, `oop_*`) unchanged.
+- Preserved legacy wide-range totals as context fields:
+  - `cost_estimate.market_total_low/high` (captured from original Part 2 `total_low/high`).
+- Added system message when correction occurs.
+
+2) API contract guard (`../Clear Claim UI/backend/main.py`)
+- Added `enforce_payable_total_contract(output)`.
+- Applied in `/api/v1/patient/estimate` before envelope creation.
+- Added message flag when API-level correction is applied.
+
+3) Frontend usage (`../Clear Claim UI/src/App.jsx`)
+- Continued using `cost_estimate.total_*` for headline/range and split denominator.
+- Added optional secondary market range display if `market_total_*` is present.
+
+4) Mock alignment (`../Clear Claim UI/src/mockData.js`)
+- Added `market_total_low/high` to mock `cost_estimate` payloads.
+- Kept `total_*` values consistent with payable totals.
+
+5) Contract tests (`../Clear Claim UI/backend/tests/test_api_contract.py`)
+- Added assertions:
+  - `total_low == insurance_low + oop_low`
+  - `total_high == insurance_high + oop_high`
+  - `market_total_low/high` keys exist.
+
+Validation results:
+- `python -m py_compile agents/cost_predictor.py graph.py` -> PASS
+- `python -m py_compile "../Clear Claim UI/backend/main.py" "../Clear Claim UI/backend/tests/test_api_contract.py"` -> PASS
+- `python -m pytest "../Clear Claim UI/backend/tests/test_api_contract.py" -q` -> PASS (3 passed)
+- Deterministic invariant matrix (5 patient scenarios) -> PASS
+  - all cases satisfy payable total equality and include market totals.
+- `python graph.py` smoke -> PASS (patient, hospital, hospital re-eval)
+
+## Single-Repo Local Merge (Frontend + Backend) - 2026-03-29
+
+Status: Completed locally
+
+Actions taken:
+- Merged active frontend from `../Clear Claim UI` into this repo at `frontend/`.
+- Excluded heavy/build/cache folders during copy (`node_modules`, `dist`, `.pytest_cache`, `__pycache__`).
+- Removed copied sqlite artifact `frontend/backend/data/clearclaim.db` from tracked state.
+- Normalized root `.gitignore` to UTF-8 and added frontend ignore rules:
+  - `frontend/node_modules/`
+  - `frontend/dist/`
+  - `frontend/.pytest_cache/`
+  - `frontend/backend/data/*.db`
+  - `frontend/backend/__pycache__/`
+  - `frontend/backend/tests/__pycache__/`
+
+Validation:
+- `python -m py_compile agents/cost_predictor.py graph.py frontend/backend/main.py frontend/backend/tests/test_api_contract.py` -> PASS
+- `python -m pytest frontend/backend/tests/test_api_contract.py -q` -> PASS (3 passed)
+
+Note:
+- Existing local modified files outside merge packaging remain unchanged (`agents/cost_predictor.py`, `app.py`, `design_research.md`, prior `research.md` edits).
+
+## CORS Fix for Frontend Dev Port - 2026-03-29
+
+Status: Completed
+
+Issue:
+- Frontend origin `http://localhost:5174` was blocked by backend CORS allowlist (backend only allowed 5173).
+
+Fix:
+- Updated `frontend/backend/main.py` CORSMiddleware `allow_origins` to include:
+  - `http://localhost:5174`
+  - `http://127.0.0.1:5174`
+
+Validation:
+- `python -m py_compile frontend/backend/main.py` -> PASS
+- Preflight OPTIONS check for `/api/v1/patient/estimate` with Origin `http://localhost:5174` -> PASS (`access-control-allow-origin: http://localhost:5174`).
+
+## Backend Fetch/CORS Runtime Fix - 2026-03-29
+
+Status: Completed
+
+Root causes identified for "failed to fetch":
+1) CORS origin mismatch for dev port 5174 (already patched).
+2) Backend runtime crash during patient POST due wrong root resolver path:
+   - attempted to load `.../ClearClaim/ClearClaim/graph.py`.
+
+Fixes in `frontend/backend/main.py`:
+- `resolve_clearclaim_root()` now detects single-repo merged layout and resolves to repo root when `graph.py` exists.
+- Added lazy-safe runtime guards:
+  - `invoke_graph()` uses `getattr(app.state, "graph_app", None)` and initializes if missing.
+  - `connect_db()` initializes DB state if missing.
+
+Validation:
+- `python -m py_compile frontend/backend/main.py` -> PASS
+- Live POST check with Origin `http://localhost:5174`:
+  - Status: 200
+  - Header: `Access-Control-Allow-Origin: http://localhost:5174`

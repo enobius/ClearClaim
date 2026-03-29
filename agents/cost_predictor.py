@@ -286,6 +286,28 @@ def _guard_explanation_numbers(explanation: str, allowed_tokens: set[str]) -> tu
     return explanation, False
 
 
+def _enforce_payable_total_contract(cost_estimate: dict) -> tuple[dict, bool]:
+    insurance_low = float(cost_estimate.get("insurance_low", 0.0))
+    insurance_high = float(cost_estimate.get("insurance_high", 0.0))
+    oop_low = float(cost_estimate.get("oop_low", 0.0))
+    oop_high = float(cost_estimate.get("oop_high", 0.0))
+
+    original_total_low = float(cost_estimate.get("total_low", 0.0))
+    original_total_high = float(cost_estimate.get("total_high", 0.0))
+
+    payable_total_low = insurance_low + oop_low
+    payable_total_high = insurance_high + oop_high
+
+    drift = (original_total_low != payable_total_low) or (original_total_high != payable_total_high)
+
+    out = dict(cost_estimate)
+    out["market_total_low"] = original_total_low
+    out["market_total_high"] = original_total_high
+    out["total_low"] = payable_total_low
+    out["total_high"] = payable_total_high
+    return out, drift
+
+
 def cost_predictor(state: dict) -> dict:
     patient_input = state.get("patient_input", {})
     benefits = state.get("benefits", {})
@@ -361,6 +383,7 @@ def cost_predictor(state: dict) -> dict:
         "explanation": explanation,
         "savings_tips": savings_tips,
     }
+    cost_estimate, payable_drift_corrected = _enforce_payable_total_contract(cost_estimate)
 
     messages = [
         {
@@ -373,6 +396,13 @@ def cost_predictor(state: dict) -> dict:
             {
                 "role": "system",
                 "content": "Cost predictor: explanation numeric drift detected and replaced with safe fallback.",
+            }
+        )
+    if payable_drift_corrected:
+        messages.append(
+            {
+                "role": "system",
+                "content": "Cost predictor: corrected total range to payable contract (insurance + oop).",
             }
         )
 
