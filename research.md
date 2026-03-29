@@ -230,3 +230,25 @@ Known environment note:
 1. Coordinate with P2/P3 on exact output key shapes to keep strict state contract stable.
 2. Run one full end-to-end demo after P2/P3 internals are merged.
 3. Keep updating this file after each merge/test cycle.
+
+## P1 Safety + P2 Logic Weave Update - 2026-03-29
+
+Status: Completed
+
+Directive implemented in `agents/cost_predictor.py`:
+- P1 Guard at input boundary:
+  - Added strict CPT validation at start of `cost_predictor(...)` via `_validate_supported_cpt(...)`.
+  - Enforces 5-digit format and supported CPT whitelist before any compute logic runs.
+- P2 Computation core preserved:
+  - Retained deterministic data loading from `data/pricing_data.json` and `data/fee_schedule.json`.
+  - Retained Part 2 compute engine call (`part2.Data.compute.compute_estimate`) as the source for total/OOP/insurance ranges.
+- P1 Safety at output boundary:
+  - Retained no-number runtime guard immediately after Claude explanation call.
+  - Out-of-band numbers are replaced with safe fallback explanation and flagged in system messages.
+
+Additional cleanup:
+- Resolved corrupted merge-conflict state in `agents/cost_predictor.py` and restored a single valid implementation path.
+
+Validation:
+- `python -m py_compile agents/cost_predictor.py app.py graph.py` -> PASS
+- `python graph.py` smoke suite -> PASS (patient, hospital, hospital re-eval)

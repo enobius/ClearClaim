@@ -3,26 +3,33 @@ Cost Predictor Agent
 ====================
 Adapter layer around Part 2 compute logic while preserving main graph/UI contract.
 
-- Keeps Part 2 compute engine formulas unchanged (part2.Data.compute.compute_estimate).
-- Maps main contract input keys to Part 2 compute inputs.
-- Maps compute output back into main state keys used by graph.py and app.py.
+Structure:
+1) P1 guard at input boundary (strict CPT validation).
+2) P2 deterministic computation core (pricing_data.json, fee_schedule.json, compute_estimate).
+3) P1 output safety guard (no-number drift check after Claude explanation call).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 
-from part2.Data.compute import compute_estimate
+from dotenv import load_dotenv
+
+from part2.Data.compute import compute_estimate as p2_compute_estimate
 from part2.Data.data import PROCEDURES
 from prompts.cost_prompt import build_cost_prompt
 
 
+load_dotenv()
+
 ROOT = Path(__file__).resolve().parent.parent
 PRICING_DATA_PATH = ROOT / "data" / "pricing_data.json"
 FEE_SCHEDULE_PATH = ROOT / "data" / "fee_schedule.json"
+SUPPORTED_CPTS = {"73721", "71260", "29827", "45380", "93306"}
 
 ZIP_PREFIX_TO_STATE = {
     "06": ("Connecticut", "CT"),
@@ -59,6 +66,18 @@ URGENCY_TO_P2 = {
 }
 
 CPT_TO_PROCEDURE = {details["cpt"]: name for name, details in PROCEDURES.items()}
+
+
+def _validate_supported_cpt(cpt_code: str) -> str:
+    value = str(cpt_code).strip()
+    if not re.fullmatch(r"\d{5}", value):
+        raise ValueError("patient_input cpt_code must be a 5-digit code.")
+    if value not in SUPPORTED_CPTS:
+        raise ValueError(
+            f"patient_input cpt_code '{value}' is not supported in this build. "
+            f"Supported CPTs: {', '.join(sorted(SUPPORTED_CPTS))}."
+        )
+    return value
 
 
 @lru_cache(maxsize=1)
@@ -188,11 +207,92 @@ def _call_claude_explainer(prompt: str) -> tuple[str, list[str]]:
     return explanation, tips[:3]
 
 
+def _normalize_numeric_token(token: str) -> str:
+    token = token.strip().replace(",", "")
+    if not token:
+        return ""
+    if token.endswith("%"):
+        base = token[:-1]
+        try:
+            val = float(base)
+            if val.is_integer():
+                return f"{int(val)}%"
+            return f"{val}%"
+        except ValueError:
+            return token
+    try:
+        val = float(token)
+        if val.is_integer():
+            return str(int(val))
+        return f"{val:.6f}".rstrip("0").rstrip(".")
+    except ValueError:
+        return token
+
+
+def _extract_numeric_tokens(text: str) -> set[str]:
+    matches = re.findall(r"\d+(?:,\d{3})*(?:\.\d+)?%?", text or "")
+    return {_normalize_numeric_token(m) for m in matches if m.strip()}
+
+
+def _allowed_numeric_tokens(
+    cpt_code: str,
+    medicare_rate: float,
+    commercial_estimate_low: float,
+    commercial_estimate_mid: float,
+    commercial_estimate_high: float,
+    deductible_remaining: float,
+    coinsurance: float,
+    oop_low: float,
+    oop_high: float,
+    submitted_charge: float,
+) -> set[str]:
+    allowed = {_normalize_numeric_token(str(cpt_code))}
+
+    def add_num(value: float) -> None:
+        val = float(value)
+        allowed.add(_normalize_numeric_token(str(val)))
+        allowed.add(_normalize_numeric_token(f"{val:.2f}"))
+        allowed.add(_normalize_numeric_token(str(int(round(val)))))
+
+    for value in (
+        medicare_rate,
+        commercial_estimate_low,
+        commercial_estimate_mid,
+        commercial_estimate_high,
+        deductible_remaining,
+        oop_low,
+        oop_high,
+        submitted_charge,
+    ):
+        add_num(value)
+
+    pct = float(coinsurance) * 100
+    allowed.add(_normalize_numeric_token(f"{pct}%"))
+    allowed.add(_normalize_numeric_token(f"{int(round(pct))}%"))
+    return allowed
+
+
+def _guard_explanation_numbers(explanation: str, allowed_tokens: set[str]) -> tuple[str, bool]:
+    observed = _extract_numeric_tokens(explanation)
+    for token in observed:
+        if token in {"1", "2", "3", "1%", "2%", "3%"}:
+            continue
+        if token not in allowed_tokens:
+            return (
+                "Estimate generated from deterministic pricing and benefits data. "
+                "Narrative explanation was replaced to enforce numeric integrity.",
+                True,
+            )
+    return explanation, False
+
+
 def cost_predictor(state: dict) -> dict:
     patient_input = state.get("patient_input", {})
     benefits = state.get("benefits", {})
 
-    cpt_code = str(patient_input.get("cpt_code", "73721")).strip() or "73721"
+    # P1 guard: strict input validation before deterministic math.
+    cpt_code = _validate_supported_cpt(patient_input.get("cpt_code", ""))
+
     zip_code = str(patient_input.get("zip_code", "06604")).strip() or "06604"
     insurance_type = str(patient_input.get("insurance_type", "aetna_ppo")).strip() or "aetna_ppo"
     provider_type = str(patient_input.get("provider_type", "hospital")).strip() or "hospital"
@@ -204,8 +304,8 @@ def cost_predictor(state: dict) -> dict:
     insurance_for_p2 = INSURANCE_TO_P2.get(insurance_type, "PPO")
     urgency_for_p2 = URGENCY_TO_P2.get(urgency, "Routine")
 
-    # Preserve Part 2 compute layer behavior as-is.
-    computed = compute_estimate(
+    # P2 computation core: preserve deterministic compute engine.
+    computed = p2_compute_estimate(
         procedure=procedure_name,
         location=state_name,
         provider=provider_for_p2,
@@ -215,6 +315,7 @@ def cost_predictor(state: dict) -> dict:
 
     cms_rates = _build_cms_rates(cpt_code, state_abbrev)
     fee_schedule = _build_fee_schedule(cpt_code, state_abbrev, insurance_type)
+    submitted_charge = float((cms_rates.get("providers") or [{}])[0].get("avg_submitted_chrg_amt", 0.0))
 
     prompt = build_cost_prompt(
         procedure_name=procedure_name,
@@ -230,10 +331,25 @@ def cost_predictor(state: dict) -> dict:
         oop_high=float(computed.get("oop_high", 0.0)),
         prior_auth_required=bool(benefits.get("prior_auth_required", False)),
         provider_name=(cms_rates.get("providers") or [{}])[0].get("provider_name", ""),
-        submitted_charge=float((cms_rates.get("providers") or [{}])[0].get("avg_submitted_chrg_amt", 0.0)),
+        submitted_charge=submitted_charge,
     )
 
     explanation, savings_tips = _call_claude_explainer(prompt)
+
+    # P1 safety: runtime no-number guard applied immediately after Claude call.
+    allowed_tokens = _allowed_numeric_tokens(
+        cpt_code=cpt_code,
+        medicare_rate=fee_schedule["medicare_rate"],
+        commercial_estimate_low=fee_schedule["commercial_estimate_low"],
+        commercial_estimate_mid=fee_schedule["commercial_estimate_mid"],
+        commercial_estimate_high=fee_schedule["commercial_estimate_high"],
+        deductible_remaining=float(benefits.get("deductible_remaining", computed.get("remaining_deductible", 0.0))),
+        coinsurance=float(benefits.get("coinsurance", 0.20)),
+        oop_low=float(computed.get("oop_low", 0.0)),
+        oop_high=float(computed.get("oop_high", 0.0)),
+        submitted_charge=submitted_charge,
+    )
+    explanation, drift_detected = _guard_explanation_numbers(explanation, allowed_tokens)
 
     cost_estimate = {
         "total_low": float(computed.get("total_low", 0.0)),
@@ -246,14 +362,23 @@ def cost_predictor(state: dict) -> dict:
         "savings_tips": savings_tips,
     }
 
+    messages = [
+        {
+            "role": "system",
+            "content": f"Cost predictor: computed Part 2 estimate for CPT {cpt_code} in {state_abbrev}.",
+        }
+    ]
+    if drift_detected:
+        messages.append(
+            {
+                "role": "system",
+                "content": "Cost predictor: explanation numeric drift detected and replaced with safe fallback.",
+            }
+        )
+
     return {
         "cms_rates": cms_rates,
         "fee_schedule": fee_schedule,
         "cost_estimate": cost_estimate,
-        "messages": [
-            {
-                "role": "system",
-                "content": f"Cost predictor: computed Part 2 estimate for CPT {cpt_code} in {state_abbrev}.",
-            }
-        ],
+        "messages": messages,
     }
